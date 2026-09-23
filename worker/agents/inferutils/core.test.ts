@@ -98,6 +98,36 @@ describe('getConfigurationForModel - gateway/key coupling', () => {
 	});
 });
 
+describe('getConfigurationForModel - self-hosted OpenAI-compatible gateway', () => {
+	const LOCAL_GATEWAY = 'http://127.0.0.1:4000';
+	const GATEWAY_KEY = 'sk-local-gateway-master-key';
+	const GEMINI_MODEL: AIModelConfig = {
+		name: 'google-ai-studio/gemini-test',
+		size: ModelSize.REGULAR,
+		provider: 'google-ai-studio',
+		creditCost: 1,
+		contextSize: 1_000_000,
+	};
+
+	it('routes to <gateway>/compat without the AI binding or a Cloudflare token', async () => {
+		const { apiKey, baseURL, defaultHeaders } = await getConfigurationForModel(
+			GEMINI_MODEL,
+			makeEnv({
+				AI: undefined,
+				CLOUDFLARE_AI_GATEWAY_URL: LOCAL_GATEWAY,
+				CLOUDFLARE_AI_GATEWAY_TOKEN: undefined,
+				CLOUDFLARE_API_TOKEN: undefined,
+				GOOGLE_AI_STUDIO_API_KEY: GATEWAY_KEY,
+			}),
+			'user-1',
+		);
+
+		expect(baseURL).toBe(`${LOCAL_GATEWAY}/compat`);
+		expect(apiKey).toBe(GATEWAY_KEY);
+		expect(defaultHeaders?.['cf-aig-authorization']).toBeUndefined();
+	});
+});
+
 describe('credentialsToRuntimeOverrides - baseUrl validation', () => {
 	it('drops a non-https gateway baseUrl', () => {
 		const result = credentialsToRuntimeOverrides({
