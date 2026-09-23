@@ -5,6 +5,7 @@
   autoPatchelfHook,
   bun,
   jq,
+  makeWrapper,
   nodejs_22,
   vibesdk-node-modules,
 }:
@@ -69,6 +70,7 @@ stdenvNoCC.mkDerivation {
       (root + "/package.json")
       (root + "/packages")
       (root + "/public")
+      (root + "/scripts/dev-browser-sidecar.ts")
       (root + "/shared")
       (root + "/space/build.mjs")
       (root + "/space/package.json")
@@ -90,6 +92,7 @@ stdenvNoCC.mkDerivation {
   nativeBuildInputs = [
     bun
     jq
+    makeWrapper
     nodejs_22
   ];
 
@@ -104,11 +107,16 @@ stdenvNoCC.mkDerivation {
 
   # Entrypoints are run through node rather than the `.bin` wrappers: their
   # `#!/usr/bin/env node` shebangs do not resolve inside the build sandbox.
+  # The browser sidecar is bundled with puppeteer left external, so it
+  # resolves from the installed node_modules next to it.
   buildPhase = ''
     runHook preBuild
     export NODE_ENV=production
     node space/build.mjs
     node node_modules/vite/bin/vite.js build
+    node node_modules/esbuild/bin/esbuild scripts/dev-browser-sidecar.ts \
+      --bundle --platform=node --format=esm --external:puppeteer \
+      --outfile=browser-sidecar.mjs
     runHook postBuild
   '';
 
@@ -178,6 +186,31 @@ stdenvNoCC.mkDerivation {
            else del(.legacy_env) end' "$config" > "$config.new"
       mv "$config.new" "$config"
     done
+
+    # Minimal config for the wrangler state commands (D1 migrations, R2
+    # seeding). The full config has container entries wrangler rejects
+    # outside a build, and a migrations path relative to the build output.
+    jq --arg migrations "$out/share/vibesdk/migrations" \
+      '{name, compatibility_date, r2_buckets,
+        d1_databases: [.d1_databases[] | .migrations_dir = $migrations]}' \
+      "$out/share/vibesdk/dist"/*/wrangler.json > "$out/share/vibesdk/wrangler.state.json"
+
+    # The wrangler that applies migrations and seeds the bucket must run the
+    # same miniflare and workerd as `vite preview`: a newer workerd writes
+    # SQLite metadata the serving one cannot read. That is the Cloudflare
+    # plugin's own wrangler, which shares the top-level miniflare.
+    modules="$out/share/vibesdk/node_modules"
+    plugin_wrangler="$modules/@cloudflare/vite-plugin/node_modules/wrangler"
+    state_workerd=$(jq -r .version "$plugin_wrangler/node_modules/workerd/package.json")
+    serve_workerd=$(jq -r .version "$modules/miniflare/node_modules/workerd/package.json")
+    if [ "$state_workerd" != "$serve_workerd" ]; then
+      echo "vibesdk: the vite plugin's wrangler bundles workerd $state_workerd but miniflare serves with $serve_workerd; point vibesdk-state-wrangler in nix/package.nix at a wrangler that matches" >&2
+      exit 1
+    fi
+    makeWrapper ${nodejs_22}/bin/node "$out/bin/vibesdk-state-wrangler" \
+      --add-flags "$plugin_wrangler/bin/wrangler.js"
+
+    cp browser-sidecar.mjs "$out/share/vibesdk/"
     runHook postInstall
   '';
 

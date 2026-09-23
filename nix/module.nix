@@ -14,6 +14,13 @@ let
   # tree is mirrored: small files copied, the heavy parts linked.
   appDir = "${stateDir}/app";
 
+  # miniflare's local persistence (D1, KV, R2, Durable Objects). It lives
+  # outside the app tree, which every start replaces, and is linked in as the
+  # plugin's default `.wrangler/state`.
+  persistDir = "${stateDir}/state";
+
+  share = "${cfg.package}/share/vibesdk";
+
   # The `.local` variant disables the plugin's remote binding session; the
   # per-binding `remote` flags do not control it.
   viteConfig = if cfg.remoteBindings then "vite.config.ts" else "vite.config.local.ts";
@@ -29,6 +36,50 @@ let
     | add // {}
   '';
 
+  # Non-secret Worker vars. They sit below the environment file, so the
+  # operator's file overrides anything set here.
+  baseVars = pkgs.writeText "vibesdk-vars.json" (
+    builtins.toJSON (
+      {
+        CUSTOM_DOMAIN = cfg.domain;
+        ENVIRONMENT = cfg.environment;
+      }
+      // lib.optionalAttrs cfg.browserSidecar.enable {
+        DEV_BROWSER_SIDECAR_URL = "http://127.0.0.1:${toString cfg.browserSidecar.port}";
+      }
+      // cfg.vars
+    )
+  );
+
+  # Brings the local D1 schema up to date and seeds the templates bucket. The
+  # upload only runs when the pinned catalog changes; its marker sits in the
+  # state it describes, so a restored backup carries both.
+  prepareState = pkgs.writeShellScript "vibesdk-prepare-state" ''
+    set -eu
+    export PATH="${
+      lib.makeBinPath [
+        pkgs.coreutils
+        pkgs.jq
+      ]
+    }"
+    config=${appDir}/wrangler.state.json
+    wrangler() {
+      ${lib.getExe' cfg.package "vibesdk-state-wrangler"} "$@" --local --persist-to ${persistDir} --config "$config"
+    }
+
+    database=$(jq -r '.d1_databases[] | select(.binding == "DB") | .database_name' "$config")
+    wrangler d1 migrations apply "$database"
+
+    bucket=$(jq -r '.r2_buckets[] | select(.binding == "TEMPLATES_BUCKET") | .bucket_name' "$config")
+    marker=${persistDir}/templates-source
+    if [ "$(cat "$marker" 2>/dev/null)" != ${cfg.templates} ]; then
+      for file in ${cfg.templates}/*; do
+        wrangler r2 object put "$bucket/$(basename "$file")" --file="$file"
+      done
+      echo ${cfg.templates} > "$marker"
+    fi
+  '';
+
   syncApp = pkgs.writeShellScript "vibesdk-sync-app" ''
     set -eu
     export PATH="${
@@ -38,13 +89,13 @@ let
         pkgs.jq
       ]
     }"
-    share="${cfg.package}/share/vibesdk"
+    share=${share}
 
     # systemd creates the directory (StateDirectory) and chdirs into it before
     # this runs, so only its contents are replaced.
     find ${appDir} -mindepth 1 -delete
     cp "$share"/index.html "$share"/package.json "$share"/${viteConfig} \
-      "$share"/wrangler.jsonc "$share"/SandboxDockerfile ${appDir}/
+      "$share"/wrangler.jsonc "$share"/wrangler.state.json "$share"/SandboxDockerfile ${appDir}/
     # `cp -R`, not `cp -a`: preserving ownership needs chown, which the
     # service's syscall filter denies.
     cp -R "$share/node_modules" ${appDir}/node_modules
@@ -54,6 +105,7 @@ let
     ln -s "$share/migrations" ${appDir}/migrations
     cp -R "$share/.wrangler" ${appDir}/.wrangler
     chmod -R u+w ${appDir}/.wrangler
+    ln -s ${persistDir} ${appDir}/.wrangler/state
 
     ${lib.optionalString (!cfg.enableContainers) ''
       # Without a container runtime the plugin aborts while building the
@@ -75,24 +127,20 @@ let
 
     # Worker vars and secrets. In preview mode the plugin takes the Worker's
     # environment from the built config only, so the values are merged into
-    # its `vars`; entries later in the file win, which lets the operator's
-    # file override what the module options derive.
+    # its `vars`, with the operator's file winning over the module options.
     umask 077
-    {
-      echo "CUSTOM_DOMAIN=${cfg.domain}"
-      echo "ENVIRONMENT=${cfg.environment}"
-    } > ${appDir}/.vars.env
-    ${lib.optionalString (cfg.environmentFile != null) ''
-      cat "$CREDENTIALS_DIRECTORY/environment" >> ${appDir}/.vars.env
-    ''}
-
-    jq -Rn -f ${varsToJson} < ${appDir}/.vars.env > ${appDir}/.vars.json
+    ${
+      if cfg.environmentFile != null then
+        ''jq -Rn -f ${varsToJson} < "$CREDENTIALS_DIRECTORY/environment" > ${appDir}/.secrets.json''
+      else
+        "echo '{}' > ${appDir}/.secrets.json"
+    }
     for config in ${appDir}/dist/*/wrangler.json; do
-      jq --slurpfile vars ${appDir}/.vars.json \
-        '.vars = ((.vars // {}) + $vars[0])' "$config" > "$config.new"
+      jq --slurpfile base ${baseVars} --slurpfile secrets ${appDir}/.secrets.json \
+        '.vars = ((.vars // {}) + $base[0] + $secrets[0])' "$config" > "$config.new"
       mv "$config.new" "$config"
     done
-    rm -f ${appDir}/.vars.env ${appDir}/.vars.json
+    rm -f ${appDir}/.secrets.json
   '';
 in
 {
@@ -102,6 +150,15 @@ in
     package = lib.mkOption {
       type = lib.types.package;
       description = "Built VibeSDK Worker, client assets and project root.";
+    };
+
+    templates = lib.mkOption {
+      type = lib.types.package;
+      description = ''
+        Template catalog (`template_catalog.json` plus one archive per
+        template) uploaded to the Worker's local `TEMPLATES_BUCKET`. Generation
+        fails with "Template catalog not found" without it.
+      '';
     };
 
     host = lib.mkOption {
@@ -158,9 +215,10 @@ in
         `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`.
 
         With it disabled the server runs the Cloudflare plugin in local mode:
-        the site serves and D1, KV, R2 and Durable Objects persist under the
-        state directory, but app generation, previews and model calls fail at
-        request time.
+        D1, KV, R2 and Durable Objects persist under the state directory, the
+        browser sidecar stands in for Browser Rendering, and model calls need
+        `CLOUDFLARE_AI_GATEWAY_URL` pointing at an OpenAI-compatible gateway
+        that serves `/compat/chat/completions`.
       '';
     };
 
@@ -188,23 +246,56 @@ in
       default = null;
       example = "/run/secrets/vibesdk.env";
       description = ''
-        `KEY=value` file appended to the Worker's `.dev.vars`, for
+        `KEY=value` file merged into the Worker's vars last, so it overrides
+        {option}`services.vibesdk.vars`. It carries secrets such as
         `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `JWT_SECRET` and the
-        model-provider keys documented in `.dev.vars.example`. Without the
-        Cloudflare credentials the site serves, but every feature behind the
-        remote bindings (Workers AI, Browser Rendering, the dispatch namespace,
-        Artifacts) fails at request time.
+        model-provider keys documented in `.dev.vars.example`.
 
         Keep it outside the Nix store: store files are world-readable.
       '';
+    };
+
+    vars = lib.mkOption {
+      type = lib.types.attrsOf lib.types.str;
+      default = { };
+      example = {
+        CLOUDFLARE_AI_GATEWAY_URL = "http://127.0.0.1:4000";
+        MAX_SANDBOX_INSTANCES = "2";
+      };
+      description = ''
+        Non-secret Worker vars, merged over `CUSTOM_DOMAIN` and `ENVIRONMENT`
+        and under {option}`services.vibesdk.environmentFile`. They end up in the
+        world-readable Nix store, so secrets belong in the environment file.
+      '';
+    };
+
+    browserSidecar = {
+      enable = lib.mkOption {
+        type = lib.types.bool;
+        default = !cfg.remoteBindings;
+        defaultText = lib.literalExpression "!config.services.vibesdk.remoteBindings";
+        description = ''
+          Run the headless Chromium sidecar the Worker uses for preview console
+          capture when the Browser Rendering binding is absent.
+        '';
+      };
+
+      port = lib.mkOption {
+        type = lib.types.port;
+        default = 9223;
+        description = "Loopback port the browser sidecar listens on.";
+      };
+
+      chromium = lib.mkPackageOption pkgs "chromium" { };
     };
 
     stateDir = lib.mkOption {
       type = lib.types.str;
       default = "vibesdk";
       description = ''
-        Directory below `/var/lib` holding the project root and miniflare's
-        local persistence (D1, KV, R2 and Durable Object state).
+        Directory below `/var/lib` holding the project root and, in its
+        `state` subdirectory, miniflare's local persistence (D1, KV, R2 and
+        Durable Object state). Only `state` needs backing up.
       '';
     };
 
@@ -260,11 +351,14 @@ in
       };
 
       serviceConfig = {
-        ExecStartPre = syncApp;
+        ExecStartPre = [
+          syncApp
+          prepareState
+        ];
         ExecStart = lib.escapeShellArgs (
           [
             "${pkgs.nodejs_22}/bin/node"
-            "${cfg.package}/share/vibesdk/node_modules/vite/bin/vite.js"
+            "${share}/node_modules/vite/bin/vite.js"
             "preview"
             "--config=${appDir}/${viteConfig}"
             "--host=${cfg.host}"
@@ -278,6 +372,7 @@ in
         StateDirectory = [
           cfg.stateDir
           "${cfg.stateDir}/app"
+          "${cfg.stateDir}/state"
         ];
         StateDirectoryMode = "0700";
         DynamicUser = true;
@@ -285,6 +380,8 @@ in
         SupplementaryGroups = lib.optional cfg.enableContainers "docker";
         Restart = "on-failure";
         RestartSec = 5;
+        # The first start seeds every template archive before serving.
+        TimeoutStartSec = "5min";
 
         AmbientCapabilities = lib.optional (cfg.port < 1024) "CAP_NET_BIND_SERVICE";
         CapabilityBoundingSet = lib.optional (cfg.port < 1024) "CAP_NET_BIND_SERVICE";
@@ -325,6 +422,61 @@ in
           "~@privileged"
           "~@resources"
         ];
+        UMask = "0077";
+      };
+    };
+
+    systemd.services.vibesdk-browser = lib.mkIf cfg.browserSidecar.enable {
+      description = "VibeSDK headless browser sidecar";
+      wantedBy = [ "multi-user.target" ];
+      before = [ "vibesdk.service" ];
+
+      environment = {
+        HOME = "/run/vibesdk-browser";
+        XDG_CONFIG_HOME = "/run/vibesdk-browser/config";
+        XDG_CACHE_HOME = "/run/vibesdk-browser/cache";
+        PORT = toString cfg.browserSidecar.port;
+        PUPPETEER_EXECUTABLE_PATH = lib.getExe cfg.browserSidecar.chromium;
+        PUPPETEER_SKIP_DOWNLOAD = "true";
+        NODE_ENV = "production";
+      };
+
+      serviceConfig = {
+        ExecStart = lib.escapeShellArgs [
+          "${pkgs.nodejs_22}/bin/node"
+          "${share}/browser-sidecar.mjs"
+        ];
+        RuntimeDirectory = "vibesdk-browser";
+        RuntimeDirectoryMode = "0700";
+        DynamicUser = true;
+        Restart = "on-failure";
+        RestartSec = 5;
+
+        CapabilityBoundingSet = [ "" ];
+        LockPersonality = true;
+        NoNewPrivileges = true;
+        PrivateDevices = true;
+        PrivateTmp = true;
+        ProtectClock = true;
+        ProtectControlGroups = true;
+        ProtectHome = true;
+        ProtectHostname = true;
+        ProtectKernelLogs = true;
+        ProtectKernelModules = true;
+        ProtectKernelTunables = true;
+        ProtectProc = "invisible";
+        ProtectSystem = "strict";
+        RemoveIPC = true;
+        RestrictAddressFamilies = [
+          "AF_INET"
+          "AF_INET6"
+          "AF_NETLINK"
+          "AF_UNIX"
+        ];
+        RestrictNamespaces = true;
+        RestrictRealtime = true;
+        RestrictSUIDSGID = true;
+        SystemCallArchitectures = "native";
         UMask = "0077";
       };
     };

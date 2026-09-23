@@ -26,6 +26,8 @@ stdenvNoCC.mkDerivation {
     python3 tools/generate_templates.py --clean
     python3 generate_template_catalog.py --output template_catalog.json
     mkdir zips
+    # Store mtimes are 1970, which the zip format cannot represent.
+    find build -exec touch -h -d @315619200 {} +
     for dir in build/*/; do
       name=$(basename "$dir")
       if [ -f "$dir/package.json" ] && [ -d "$dir/prompts" ] \
