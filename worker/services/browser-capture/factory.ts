@@ -1,8 +1,8 @@
 /**
  * Selects the right `BrowserCaptureClient` for the current runtime
- * environment. In dev we hit a local sidecar so puppeteer can run
- * natively against `localhost` previews; in prod we use the
- * Cloudflare `BROWSER` binding directly.
+ * environment. In dev, and on self-hosted deployments without the
+ * Cloudflare `BROWSER` binding, we hit a local sidecar that runs
+ * puppeteer natively; otherwise we use the `BROWSER` binding directly.
  */
 
 import { isDev } from '../../utils/envs';
@@ -15,7 +15,7 @@ export function getBrowserCaptureClient(
 	env: Env,
 	logger: StructuredLogger,
 ): BrowserCaptureClient {
-	return isDev(env)
+	return isDev(env) || !env.BROWSER
 		? new SidecarCaptureClient(env, logger)
 		: new BindingCaptureClient(env, logger);
 }

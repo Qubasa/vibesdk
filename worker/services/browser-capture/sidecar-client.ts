@@ -1,7 +1,8 @@
 /**
- * Dev capture client. Talks to a local Node sidecar (`npm run dev:browser`)
- * over HTTP. The sidecar drives Chromium locally with `puppeteer` and
- * shares the `runCapture` core with the prod path.
+ * Sidecar capture client. Talks to a local Node sidecar (`npm run dev:browser`
+ * in dev, a system service on self-hosted deployments) over HTTP. The
+ * sidecar drives Chromium locally with `puppeteer` and shares the
+ * `runCapture` core with the binding path.
  *
  * Contract: this client NEVER throws. When the sidecar is unreachable
  * or misbehaves we log a warning and return an empty result with a
@@ -10,6 +11,7 @@
  */
 
 import type { StructuredLogger } from '../../logger';
+import { isDev } from '../../utils/envs';
 import type {
 	BrowserCaptureClient,
 	BrowserConsoleCaptureResult,
@@ -26,9 +28,8 @@ const CAPTURE_TIMEOUT_MS = 90_000;
  * actual reachable dev origin. The agent's `getBrowserPreviewURL` can
  * produce internal-only hosts (e.g. `space-internal` when the
  * agent state's `wsOrigin` is contaminated by an internal RPC URL),
- * which the local Chromium can't resolve. Since the sidecar only runs
- * in dev, we know the user's dev server is at localhost:5173 (or a
- * configured override).
+ * which the local Chromium can't resolve. In dev we know the user's
+ * dev server is at localhost:5173 (or a configured override).
  */
 function rewriteToLocalHost(rawUrl: string, devOrigin: string): string {
 	try {
@@ -53,20 +54,20 @@ export class SidecarCaptureClient implements BrowserCaptureClient {
 		payload: CapturePayload,
 	): Promise<BrowserConsoleCaptureResult> {
 		const base = this.env.DEV_BROWSER_SIDECAR_URL || DEFAULT_SIDECAR_URL;
+		// In dev, always navigate against the local dev server; only the
+		// scheme + host are rewritten. Self-hosted deployments load the
+		// public preview URL as-is, since the Worker routes previews by host.
 		const devOrigin =
 			this.env.DEV_BROWSER_PREVIEW_ORIGIN || DEFAULT_DEV_PREVIEW_ORIGIN;
-
-		// Always navigate against the local dev server. The path part of
-		// the agent-supplied URL is preserved, only the scheme + host
-		// are rewritten.
-		const rewrittenUrl = rewriteToLocalHost(payload.url, devOrigin);
-		if (rewrittenUrl !== payload.url) {
+		const localPayload: CapturePayload = isDev(this.env)
+			? { ...payload, url: rewriteToLocalHost(payload.url, devOrigin) }
+			: payload;
+		if (localPayload.url !== payload.url) {
 			this.logger.info('Rewriting preview URL host for local dev capture', {
 				original: payload.url,
-				rewritten: rewrittenUrl,
+				rewritten: localPayload.url,
 			});
 		}
-		const localPayload: CapturePayload = { ...payload, url: rewrittenUrl };
 
 		// Phase 1 — health probe with tight timeout so unavailability fails fast.
 		try {
