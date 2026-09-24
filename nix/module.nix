@@ -351,6 +351,9 @@ in
         CLOUDFLARE_CF_FETCH_ENABLED = if cfg.remoteBindings then "true" else "false";
         CI = "true"; # keeps wrangler's prompts and TUI out of the journal
         NODE_ENV = "production";
+        # workerd's bundled BoringSSL looks for /etc/ssl/cert.pem, which NixOS
+        # does not have, and then fails every outgoing HTTPS fetch.
+        SSL_CERT_FILE = config.security.pki.caBundle;
       };
 
       serviceConfig = {
