@@ -239,18 +239,19 @@ export class ThinkCodingBehavior
 
 		// `getConfigurationForModel` only emits `cf-aig-authorization` when a
 		// *separate* provider key exists (apiKey !== gatewayToken). When it's
-		// absent, the platform has no provider key of its own and relies on the
-		// gateway's stored keys (BYOK) — so authenticate with the gateway token
+		// absent but a gateway token exists, the platform relies on the
+		// gateway's stored keys (BYOK), so authenticate with the gateway token
 		// and let `ThinkAgent.getModel()` drop the provider `Authorization`
-		// header (see `useStoredKeys`).
+		// header (see `useStoredKeys`). Without a gateway token the provider key
+		// is the only credential and must stay.
 		const tokenEnv = this.env as unknown as {
 			CLOUDFLARE_AI_GATEWAY_TOKEN?: string;
 			CLOUDFLARE_API_TOKEN?: string;
 		};
 		const gatewayToken = tokenEnv.CLOUDFLARE_AI_GATEWAY_TOKEN || tokenEnv.CLOUDFLARE_API_TOKEN;
-		const usesStoredKeys = !conf.defaultHeaders?.['cf-aig-authorization'];
 		const headers: Record<string, string> = { ...(conf.defaultHeaders ?? {}) };
-		if (gatewayToken && !headers['cf-aig-authorization']) {
+		const usesStoredKeys = !!gatewayToken && !headers['cf-aig-authorization'];
+		if (usesStoredKeys) {
 			headers['cf-aig-authorization'] = `Bearer ${gatewayToken}`;
 		}
 
