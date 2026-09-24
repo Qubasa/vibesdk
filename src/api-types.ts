@@ -281,8 +281,10 @@ export interface AuthProvidersResponseData {
     google: boolean;
     github: boolean;
     cloudflare: boolean;
+    oidc: boolean;
     email: boolean;
   };
+  oidcName: string | null;
   hasOAuth: boolean;
   requiresEmailAuth: boolean;
   csrfToken?: string;

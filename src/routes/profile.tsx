@@ -174,9 +174,11 @@ export default function Profile() {
 									) : (
 										<Globe className="size-3" />
 									)}
-									{capitalizeFirstLetter(
-										user?.provider ?? '',
-									)}
+									{user?.provider === 'oidc'
+										? 'Single sign-on'
+										: capitalizeFirstLetter(
+												user?.provider ?? '',
+											)}
 								</Badge>
 								{user?.emailVerified && (
 									<Badge variant="success" className="gap-1">

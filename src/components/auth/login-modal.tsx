@@ -17,17 +17,19 @@ import CloudflareLogo from '@/assets/provider-logos/cloudflare.svg?react';
 import {
 	EyeIcon,
 	EyeSlashIcon,
+	KeyIcon,
 	WarningCircleIcon,
 	XIcon,
 } from '@phosphor-icons/react';
 import { OrangeButton } from '../shared/OrangeButton';
+import type { OAuthProvider } from '@/api-types';
 
 interface LoginModalProps {
 	isOpen: boolean;
 	onClose: () => void;
 
 	// Original OAuth-only interface (for backward compatibility)
-	onLogin: (provider: 'google' | 'github' | 'cloudflare') => void;
+	onLogin: (provider: OAuthProvider) => void;
 
 	// New enhanced interfaces (optional)
 	onEmailLogin?: (credentials: {
@@ -35,7 +37,7 @@ interface LoginModalProps {
 		password: string;
 	}) => Promise<void>;
 	onOAuthLogin?: (
-		provider: 'google' | 'github' | 'cloudflare',
+		provider: OAuthProvider,
 		redirectUrl?: string,
 	) => void;
 	onRegister?: (data: {
@@ -65,7 +67,7 @@ export function LoginModal({
 	actionContext,
 	showCloseButton = true,
 }: LoginModalProps) {
-	const { authProviders, hasOAuth } = useAuth();
+	const { authProviders, oidcName, hasOAuth } = useAuth();
 	const [mode, setMode] = useState<AuthMode>('login');
 	const [showPassword, setShowPassword] = useState(false);
 	const [isLoading, setIsLoading] = useState(false);
@@ -90,6 +92,7 @@ export function LoginModal({
 	const showGitHub = authProviders?.github && hasOAuth;
 	const showGoogle = authProviders?.google && hasOAuth;
 	const showCloudflare = authProviders?.cloudflare && hasOAuth;
+	const showOidc = authProviders?.oidc && hasOAuth;
 
 	const resetForm = () => {
 		setEmail('');
@@ -183,7 +186,7 @@ export function LoginModal({
 		}
 	};
 
-	const handleOAuthClick = (provider: 'google' | 'github' | 'cloudflare') => {
+	const handleOAuthClick = (provider: OAuthProvider) => {
 		// Use the new interface if available, otherwise fall back to original
 		if (onOAuthLogin) {
 			// Pass the current URL as redirect URL for context preservation
@@ -267,6 +270,18 @@ export function LoginModal({
 
 				{/* Authentication Options */}
 				<div className={cn('p-6 space-y-4 pt-6')}>
+					{showOidc && (
+						<Button
+							type="button"
+							variant="secondary"
+							className="w-full justify-center"
+							onClick={() => handleOAuthClick('oidc')}
+							icon={<KeyIcon className="h-5 w-5" />}
+						>
+							Continue with {oidcName}
+						</Button>
+					)}
+
 					{/* GitHub */}
 					{showGitHub && (
 						<Button

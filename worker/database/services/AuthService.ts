@@ -13,6 +13,7 @@ import { PasswordService } from '../../utils/passwordService';
 import { GoogleOAuthProvider } from '../../services/oauth/google';
 import { GitHubOAuthProvider } from '../../services/oauth/github';
 import { CloudflareConnectOAuthProvider } from '../../services/oauth/cloudflare-connect';
+import { OIDCOAuthProvider } from '../../services/oauth/oidc';
 import { BaseOAuthProvider } from '../../services/oauth/base';
 import { readOAuthNonceCookie } from '../../utils/oauthCookie';
 import { 
@@ -61,6 +62,8 @@ export function providerLabel(provider: string | null | undefined): string {
             return 'GitHub';
         case 'cloudflare':
             return 'Cloudflare';
+        case 'oidc':
+            return 'single sign-on';
         default:
             return 'a different sign-in method';
     }
@@ -321,6 +324,8 @@ export class AuthService extends BaseService {
                 return GitHubOAuthProvider.create(this.env, url);
             case 'cloudflare':
                 return CloudflareConnectOAuthProvider.createForLogin(this.env, url);
+            case 'oidc':
+                return OIDCOAuthProvider.create(this.env, url);
             default:
                 throw new SecurityError(
                     SecurityErrorType.INVALID_INPUT,

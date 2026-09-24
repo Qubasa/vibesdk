@@ -25,6 +25,7 @@ import type {
 	AuthSession,
 	AuthUser,
 	LoginResponseData,
+	OAuthProvider,
 	ProfileResponseData,
 	SessionResponse,
 } from '../api-types';
@@ -55,14 +56,16 @@ interface AuthContextType {
 		google: boolean;
 		github: boolean;
 		cloudflare: boolean;
+		oidc: boolean;
 		email: boolean;
 	} | null;
+	oidcName: string | null;
 	hasOAuth: boolean;
 	requiresEmailAuth: boolean;
 
 	// OAuth login method with redirect support
 	login: (
-		provider: 'google' | 'github' | 'cloudflare',
+		provider: OAuthProvider,
 		redirectUrl?: string,
 	) => void;
 
@@ -100,8 +103,10 @@ const DEFAULT_AUTH_PROVIDERS: AuthProvidersResponseData = {
 		google: false,
 		github: false,
 		cloudflare: false,
+		oidc: false,
 		email: true,
 	},
+	oidcName: null,
 	hasOAuth: false,
 	requiresEmailAuth: true,
 };
@@ -284,7 +289,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 	// OAuth login method with redirect support
 	const login = useCallback(
 		(
-			provider: 'google' | 'github' | 'cloudflare',
+			provider: OAuthProvider,
 			redirectUrl?: string,
 		) => {
 			const intendedUrl =
@@ -431,6 +436,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 			isLoading,
 			error,
 			authProviders: providers?.providers ?? null,
+			oidcName: providers?.oidcName ?? null,
 			hasOAuth: providers?.hasOAuth ?? false,
 			requiresEmailAuth: providers?.requiresEmailAuth ?? true,
 			login,

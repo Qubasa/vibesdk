@@ -8,6 +8,9 @@ declare namespace Cloudflare {
 		ENABLE_EMAIL_AUTH?: string;
 		ENABLE_READ_REPLICAS?: string;
 		ENABLE_USER_ACCOUNT_DEPLOY?: string;
+		OIDC_DISPLAY_NAME?: string;
+		OIDC_ISSUER?: string;
+		OIDC_CLIENT_ID?: string;
 		USE_CLOUDFLARE_IMAGES?: string;
 		USE_TUNNEL_FOR_PREVIEW?: string;
 
@@ -23,6 +26,7 @@ declare namespace Cloudflare {
 		GOOGLE_CLIENT_SECRET: string;
 		GITHUB_CLIENT_ID: string;
 		GITHUB_CLIENT_SECRET: string;
+		OIDC_CLIENT_SECRET: string;
 		OPENROUTER_API_KEY: string;
 		PLATFORM_MODEL_PROVIDERS: string;
 		SANDBOX_SERVICE_API_KEY: string;

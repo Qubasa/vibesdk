@@ -143,6 +143,7 @@ The script will also ask for OAuth credentials:
 - **Google OAuth**: For user authentication and login (not AI Studio access)
 - **GitHub OAuth**: For user authentication and login
 - **GitHub Export OAuth**: For exporting generated apps to GitHub repositories (separate from login OAuth)
+- **OpenID Connect**: For login through any OIDC identity provider (Authentik, Keycloak, Dex). Set `OIDC_ISSUER`, `OIDC_CLIENT_ID` and `OIDC_CLIENT_SECRET`, and optionally `OIDC_DISPLAY_NAME` for the button label. The endpoints come from the issuer's discovery document, and the redirect URI to register is `https://<your domain>/api/auth/callback/oidc`. Accounts are only created when the provider reports `email_verified: true`. Combine it with `ENABLE_EMAIL_AUTH="false"` to make the provider the only way in.
 
 **If you don't provide OAuth credentials, by default at login, you will only be able to use email-based registration/login.**
 

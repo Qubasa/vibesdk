@@ -7,7 +7,7 @@ import type { ApiKey, AuthAttempt as SchemaAuthAttempt, AuditLog, OAuthState } f
 /**
  * OAuth provider types
  */
-export type OAuthProvider = 'google' | 'github' | 'cloudflare';
+export type OAuthProvider = 'google' | 'github' | 'cloudflare' | 'oidc';
 
 /**
  * Authenticated user for middleware and session context

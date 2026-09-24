@@ -7,6 +7,7 @@ import React, { createContext, useContext, useState, useCallback, useEffect } fr
 import { LoginModal } from './login-modal';
 import { useAuth } from '../../contexts/auth-context';
 import { setGlobalAuthModalTrigger } from '../../lib/api-client';
+import type { OAuthProvider } from '../../api-types';
 
 interface AuthModalContextType {
   showAuthModal: (context?: string, onSuccess?: () => void, intendedUrl?: string) => void;
@@ -63,7 +64,7 @@ export function AuthModalProvider({ children }: AuthModalProviderProps) {
     }
   }, [isAuthenticated, pendingAction, isAuthModalOpen, hideAuthModal]);
 
-  const handleLogin = useCallback((provider: 'google' | 'github' | 'cloudflare', redirectUrl?: string) => {
+  const handleLogin = useCallback((provider: OAuthProvider, redirectUrl?: string) => {
     // Use the intended URL if available, otherwise use the provided redirect URL
     const finalRedirectUrl = intendedUrl || redirectUrl;
     login(provider, finalRedirectUrl);

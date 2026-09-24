@@ -7,7 +7,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { Loader2, Link2, Unlink, ShieldCheck } from 'lucide-react';
+import { Loader2, Link2, Unlink, ShieldCheck, KeyRound } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -66,9 +66,13 @@ const PROVIDER_META: Record<
 		label: 'Cloudflare',
 		icon: <CloudflareLogo variant="glyph" className="h-5 w-5" />,
 	},
+	oidc: {
+		label: 'Single sign-on',
+		icon: <KeyRound className="h-5 w-5" />,
+	},
 };
 
-const PROVIDER_ORDER: OAuthProvider[] = ['github', 'google', 'cloudflare'];
+const PROVIDER_ORDER: OAuthProvider[] = ['oidc', 'github', 'google', 'cloudflare'];
 
 export function ConnectedAccounts() {
 	const { authProviders } = useAuth();

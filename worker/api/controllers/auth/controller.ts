@@ -34,6 +34,7 @@ import {
 } from '../../../utils/oauthCookie';
 import { encryptTokens, type EncryptedTokenData } from '../../../utils/tokenEncryption';
 import { CloudflareConnectOAuthProvider } from '../../../services/oauth/cloudflare-connect';
+import { OIDCOAuthProvider } from '../../../services/oauth/oidc';
 import { CloudflareProvisioningService } from '../../../services/cloudflare/CloudflareProvisioningService';
 import { isCloudflareGatewayLimitsEnabled } from '../../../services/rate-limit';
 import { isEmailAuthEnabled } from '../../../utils/envs';
@@ -833,15 +834,17 @@ export class AuthController extends BaseController {
                 google: !!env.GOOGLE_CLIENT_ID && !!env.GOOGLE_CLIENT_SECRET,
                 github: !!env.GITHUB_CLIENT_ID && !!env.GITHUB_CLIENT_SECRET,
                 cloudflare: CloudflareConnectOAuthProvider.isLoginConfigured(env),
+                oidc: OIDCOAuthProvider.isConfigured(env),
                 email: isEmailAuthEnabled(env)
             };
-            const hasOAuth = providers.google || providers.github || providers.cloudflare;
+            const hasOAuth = providers.google || providers.github || providers.cloudflare || providers.oidc;
             
             // Include CSRF token with provider info
             const csrfToken = CsrfService.getOrGenerateToken(request, false);
             
             const response = AuthController.createSuccessResponse({
                 providers,
+                oidcName: providers.oidc ? env.OIDC_DISPLAY_NAME || 'Single sign-on' : null,
                 hasOAuth,
                 requiresEmailAuth: !hasOAuth,
                 csrfToken,

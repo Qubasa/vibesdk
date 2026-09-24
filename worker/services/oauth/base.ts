@@ -49,6 +49,11 @@ export abstract class BaseOAuthProvider {
     protected abstract readonly scopes: string[];
     /** Providers may override to use HTTP Basic auth for token requests. */
     protected readonly clientAuthMethod: OAuthClientAuthMethod = 'body';
+    /** Extra authorization request parameters, Google's by default. */
+    protected readonly authorizationParams: Record<string, string> = {
+        access_type: 'offline', // Request refresh token
+        prompt: 'consent', // Force consent to get refresh token
+    };
 
     constructor(
         protected clientId: string,
@@ -66,8 +71,7 @@ export abstract class BaseOAuthProvider {
             response_type: 'code',
             scope: this.scopes.join(' '),
             state,
-            access_type: 'offline', // Request refresh token
-            prompt: 'consent' // Force consent to get refresh token
+            ...this.authorizationParams,
         });
         
         // Add PKCE challenge if provided
