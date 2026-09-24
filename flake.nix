@@ -107,6 +107,9 @@
               machine.succeed("curl -sSf http://localhost:5173/ | grep -q '<div id=\"root\">'")
               machine.succeed("curl -sSf http://localhost:5173/favicon.ico -o /dev/null")
 
+              with subtest("no debugger port is open"):
+                  machine.fail("ss -Htln 'sport = :9229' | grep -q .")
+
               with subtest("module vars reach the Worker config"):
                   machine.succeed(
                       "jq -e '.vars.VIBESDK_TEST_VAR == \"from-module\" and .vars.CUSTOM_DOMAIN == \"localhost:5173\"' "

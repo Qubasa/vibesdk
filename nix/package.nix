@@ -139,8 +139,11 @@ stdenvNoCC.mkDerivation {
     cp -R migrations "$out/share/vibesdk/migrations"
     # package.json comes along for its `"type": "module"`: without it vite
     # loads vite.config.ts as CommonJS and the ESM-only Cloudflare plugin fails.
-    cp index.html package.json vite.config.ts wrangler.jsonc SandboxDockerfile \
-      "$out/share/vibesdk/"
+    cp index.html package.json wrangler.jsonc SandboxDockerfile "$out/share/vibesdk/"
+    # No debugger attaches to a server, and the plugin's inspector port would
+    # hand the Worker and its secrets to any local process that connects.
+    substitute vite.config.ts "$out/share/vibesdk/vite.config.ts" \
+      --replace-fail "cloudflare({" "cloudflare({ inspectorPort: false,"
     # The vite plugin builds the sandbox image with the app directory as its
     # context, so everything the Dockerfile copies has to be installed.
     cp -R container "$out/share/vibesdk/container"
@@ -154,7 +157,7 @@ stdenvNoCC.mkDerivation {
     # Variant used when the deployment has no Cloudflare credentials: the
     # plugin opens a remote binding session unless told not to, regardless of
     # the per-binding `remote` flags.
-    substitute vite.config.ts "$out/share/vibesdk/vite.config.local.ts" \
+    substitute "$out/share/vibesdk/vite.config.ts" "$out/share/vibesdk/vite.config.local.ts" \
       --replace-fail "cloudflare({" "cloudflare({ remoteBindings: false,"
     # A farm of links rather than one node_modules symlink: vite writes
     # `node_modules/.vite-temp` into the project root while loading the
