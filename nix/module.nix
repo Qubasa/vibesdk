@@ -102,6 +102,9 @@ let
     chmod u+w ${appDir}/node_modules ${appDir}/node_modules/@*
     cp -R "$share/dist" ${appDir}/dist
     chmod -R u+w ${appDir}/dist
+    # A real copy: docker build does not follow a symlinked context directory.
+    cp -R "$share/container" ${appDir}/container
+    chmod -R u+w ${appDir}/container
     ln -s "$share/migrations" ${appDir}/migrations
     cp -R "$share/.wrangler" ${appDir}/.wrangler
     chmod -R u+w ${appDir}/.wrangler

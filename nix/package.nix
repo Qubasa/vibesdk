@@ -63,6 +63,7 @@ stdenvNoCC.mkDerivation {
     fileset = fs.unions [
       (root + "/.npmrc")
       (root + "/SandboxDockerfile")
+      (root + "/container")
       (root + "/bun.lock")
       (root + "/bunfig.toml")
       (root + "/index.html")
@@ -140,6 +141,15 @@ stdenvNoCC.mkDerivation {
     # loads vite.config.ts as CommonJS and the ESM-only Cloudflare plugin fails.
     cp index.html package.json vite.config.ts wrangler.jsonc SandboxDockerfile \
       "$out/share/vibesdk/"
+    # The vite plugin builds the sandbox image with the app directory as its
+    # context, so everything the Dockerfile copies has to be installed.
+    cp -R container "$out/share/vibesdk/container"
+    for src in $(sed -n 's/^COPY \([^ ]*\) .*/\1/p' SandboxDockerfile); do
+      if [ ! -e "$out/share/vibesdk/$src" ]; then
+        echo "vibesdk: SandboxDockerfile copies $src, which is not installed" >&2
+        exit 1
+      fi
+    done
 
     # Variant used when the deployment has no Cloudflare credentials: the
     # plugin opens a remote binding session unless told not to, regardless of
