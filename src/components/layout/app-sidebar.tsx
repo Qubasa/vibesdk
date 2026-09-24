@@ -11,6 +11,7 @@ import {
 } from '@phosphor-icons/react';
 import { isValid } from 'date-fns';
 import { Link, useLocation, useNavigate } from 'react-router';
+import GiLogo from '@/assets/gi-logo.svg?react';
 import {
 	Button,
 	CloudflareLogo,
@@ -262,9 +263,9 @@ export function AppSidebar() {
 			>
 				{isCollapsed ? (
 					<div className="relative flex size-9 items-center justify-center">
-						<CloudflareLogo
-							variant="glyph"
-							className="size-7 shrink-0 transition-opacity group-hover/sidebar:opacity-0 group-focus-within/sidebar:opacity-0"
+						<GiLogo
+							aria-hidden
+							className="size-7 shrink-0 text-kumo-strong transition-opacity group-hover/sidebar:opacity-0 group-focus-within/sidebar:opacity-0"
 						/>
 						<Sidebar.Trigger
 							aria-label="Open sidebar"
@@ -277,10 +278,7 @@ export function AppSidebar() {
 							to="/"
 							className="flex min-w-0 flex-1 items-center gap-2.5 text-kumo-strong"
 						>
-							<CloudflareLogo
-								variant="glyph"
-								className="size-7 shrink-0"
-							/>
+							<GiLogo aria-hidden className="size-7 shrink-0" />
 							<span className="min-w-0 flex-1 truncate text-base font-black font-funky-mono uppercase tracking-wide">
 								Build
 							</span>
