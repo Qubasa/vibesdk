@@ -75,6 +75,9 @@ export function setupAppRoutes(app: Hono<AppEnv>): void {
     // Generate owner-preview token so the owner can open a private deployed
     // app's URL on a preview subdomain - OWNER ONLY
     appRouter.post('/:id/preview-token', setAuthLevel(AuthConfig.ownerOnly), adaptController(AppViewController, AppViewController.generatePreviewToken));
+
+    // Mint a preview share link for a public app - OWNER ONLY
+    appRouter.post('/:id/share-link', setAuthLevel(AuthConfig.ownerOnly), adaptController(AppViewController, AppViewController.createShareLink));
     
     
     // Mount the app router under /api/apps

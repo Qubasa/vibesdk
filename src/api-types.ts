@@ -39,6 +39,7 @@ export type {
   AppStarToggleData,
   GeneratedCodeFile,
   GitCloneTokenData,
+  PreviewShareLinkData,
   PreviewTokenData
 } from 'worker/api/controllers/appView/types';
 

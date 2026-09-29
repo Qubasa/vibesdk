@@ -27,7 +27,19 @@ describe('spacePreviewToken', () => {
 			branch: 'main',
 			userId: 'user-a',
 			previewVersion: 3,
+			expiresAt: expect.any(Number),
 		});
+	});
+
+	it('verifies a share token minted without expiry', async () => {
+		const token = await signSpacePreviewToken(
+			testEnv,
+			{ spaceName: 'space-a', branch: 'main', userId: 'user-a', previewVersion: 0 },
+			null,
+		);
+
+		const claims = await verifySpacePreviewToken(testEnv, token, 'space-a', 'main');
+		expect(claims?.expiresAt).toBeNull();
 	});
 
 	it('rejects a token missing previewVersion', async () => {
@@ -111,6 +123,7 @@ describe('preview cookie helpers', () => {
 			branch: 'main',
 			crossSite: false,
 			secure: false,
+			expiresAt: null,
 		});
 		expect(cookie).toContain(`${SPACE_PREVIEW_COOKIE_NAME}=abc`);
 		expect(cookie).toContain('Path=/space/space-a/preview/main');
@@ -127,6 +140,7 @@ describe('preview cookie helpers', () => {
 			branch: 'main',
 			crossSite: true,
 			secure: true,
+			expiresAt: null,
 		});
 		expect(cookie).toContain('SameSite=None');
 		expect(cookie).toContain('Secure');
@@ -140,8 +154,17 @@ describe('preview cookie helpers', () => {
 			branch: 'feat/x',
 			crossSite: false,
 			secure: true,
+			expiresAt: null,
 		});
 		expect(cookie).toContain('Path=/space/my%20space/preview/feat%2Fx');
+	});
+
+	it('lets the cookie expire with its token, or last the session without expiry', () => {
+		const now = Math.floor(Date.now() / 1000);
+		const base = { token: 'abc', spaceName: 'space-a', branch: 'main', crossSite: false, secure: true };
+		expect(buildPreviewCookie({ ...base, expiresAt: now + 600 })).toMatch(/Max-Age=(599|600);/);
+		expect(buildPreviewCookie({ ...base, expiresAt: now - 5 })).toContain('Max-Age=0;');
+		expect(buildPreviewCookie({ ...base, expiresAt: null })).not.toContain('Max-Age');
 	});
 
 	it('reads the preview cookie value from the Cookie header', () => {

@@ -407,6 +407,20 @@ export class CodeGeneratorAgent extends Agent<Env, AgentState> implements AgentI
         return ''; // Unimplemented
     }
 
+    /**
+     * Mint a shareable preview link for the current branch. `ttlSeconds: null`
+     * gives a link without expiry, which still dies when the app is made
+     * private. Returns `null` when the app has no space preview to share: not
+     * a think app, or not deployed yet.
+     */
+    async getPreviewShareURL(ttlSeconds: number | null): Promise<string | null> {
+        if (this.state.behaviorType !== 'think' || !this.state.lastDeployedCommit) {
+            return null;
+        }
+        const think = this.behavior as unknown as ThinkCodingBehavior;
+        return think.getBrowserPreviewURL(undefined, ttlSeconds);
+    }
+
     deployToSandbox(
         files: FileOutputType[] = [],
         redeploy: boolean = false,

@@ -54,13 +54,16 @@ export class JWTUtils {
         }
     }
 
-    async signPayload(payload: Record<string, unknown>, expiresIn: number): Promise<string> {
+    /** `expiresIn: null` signs a token without `exp`, valid until revoked some other way. */
+    async signPayload(payload: Record<string, unknown>, expiresIn: number | null): Promise<string> {
         const now = Math.floor(Date.now() / 1000);
-        return new SignJWT({ ...payload })
+        const jwt = new SignJWT({ ...payload })
             .setProtectedHeader({ alg: this.algorithm })
-            .setIssuedAt(now)
-            .setExpirationTime(now + expiresIn)
-            .sign(this.jwtSecret);
+            .setIssuedAt(now);
+        if (expiresIn !== null) {
+            jwt.setExpirationTime(now + expiresIn);
+        }
+        return jwt.sign(this.jwtSecret);
     }
 
     async verifyPayload(token: string): Promise<Record<string, unknown> | null> {

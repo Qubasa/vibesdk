@@ -16,12 +16,22 @@ export interface SpacePreviewClaims {
 	previewVersion: number;
 }
 
+export interface VerifiedSpacePreview extends SpacePreviewClaims {
+	/** Unix seconds the token stops working, or `null` for a token without expiry. */
+	expiresAt: number | null;
+}
+
+/**
+ * `ttlSeconds: null` mints a share link without expiry. Like every preview
+ * token it still dies when the app is made private (see `previewVersion`).
+ */
 export async function signSpacePreviewToken(
 	env: { JWT_SECRET: string },
 	claims: SpacePreviewClaims,
+	ttlSeconds: number | null = SPACE_PREVIEW_TOKEN_TTL_SECONDS,
 ): Promise<string> {
 	const jwt = JWTUtils.getInstance(env);
-	return jwt.signPayload({ ...claims, purpose: PREVIEW_PURPOSE }, SPACE_PREVIEW_TOKEN_TTL_SECONDS);
+	return jwt.signPayload({ ...claims, purpose: PREVIEW_PURPOSE }, ttlSeconds);
 }
 
 export async function verifySpacePreviewToken(
@@ -29,7 +39,7 @@ export async function verifySpacePreviewToken(
 	token: string,
 	expectedSpaceName: string,
 	expectedBranch: string,
-): Promise<SpacePreviewClaims | null> {
+): Promise<VerifiedSpacePreview | null> {
 	const jwt = JWTUtils.getInstance(env);
 	const payload = await jwt.verifyPayload(token);
 	if (!payload) return null;
@@ -44,6 +54,7 @@ export async function verifySpacePreviewToken(
 		branch: payload.branch,
 		userId: payload.userId,
 		previewVersion: payload.previewVersion,
+		expiresAt: typeof payload.exp === 'number' ? payload.exp : null,
 	};
 }
 
@@ -59,6 +70,8 @@ export function buildSpacePreviewCookiePath(spaceName: string, branch: string): 
  * Build the `Set-Cookie` value for the path-scoped HttpOnly preview cookie.
  * - Separate preview domain (cross-site iframe): `SameSite=None; Secure; Partitioned`.
  * - Same-origin (dev/main domain): `SameSite=Lax` (+ `Secure` when served over https).
+ * The cookie lives as long as the token it carries: until `expiresAt`, or for
+ * the browser session when the token has no expiry.
  */
 export function buildPreviewCookie(opts: {
 	token: string;
@@ -66,17 +79,15 @@ export function buildPreviewCookie(opts: {
 	branch: string;
 	crossSite: boolean;
 	secure: boolean;
-	ttlSeconds?: number;
+	expiresAt: number | null;
 }): string {
-	const { token, spaceName, branch, crossSite, secure } = opts;
-	const maxAge = opts.ttlSeconds ?? SPACE_PREVIEW_TOKEN_TTL_SECONDS;
+	const { token, spaceName, branch, crossSite, secure, expiresAt } = opts;
 	const path = buildSpacePreviewCookiePath(spaceName, branch);
-	const parts = [
-		`${SPACE_PREVIEW_COOKIE_NAME}=${token}`,
-		`Path=${path}`,
-		`Max-Age=${maxAge}`,
-		'HttpOnly',
-	];
+	const parts = [`${SPACE_PREVIEW_COOKIE_NAME}=${token}`, `Path=${path}`];
+	if (expiresAt !== null) {
+		parts.push(`Max-Age=${Math.max(0, expiresAt - Math.floor(Date.now() / 1000))}`);
+	}
+	parts.push('HttpOnly');
 	if (crossSite) {
 		parts.push('SameSite=None', 'Secure', 'Partitioned');
 	} else {

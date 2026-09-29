@@ -15,6 +15,7 @@ import type{
 	AppDetailsData,
 	AppStarToggleData,
 	GitCloneTokenData,
+	PreviewShareLinkData,
 	PreviewTokenData,
 	UserAppsData,
 	ProfileUpdateData,
@@ -588,6 +589,21 @@ class ApiClient {
 	): Promise<ApiResponse<PreviewTokenData>> {
 		return this.request<PreviewTokenData>(`/api/apps/${appId}/preview-token`, {
 			method: 'POST',
+		});
+	}
+
+	/**
+	 * Mint a preview link for a public app that works without an account.
+	 * `expiresInSeconds: null` gives a link that lasts until the app is made
+	 * private.
+	 */
+	async createPreviewShareLink(
+		appId: string,
+		expiresInSeconds: number | null = null,
+	): Promise<ApiResponse<PreviewShareLinkData>> {
+		return this.request<PreviewShareLinkData>(`/api/apps/${appId}/share-link`, {
+			method: 'POST',
+			body: { expiresInSeconds },
 		});
 	}
 

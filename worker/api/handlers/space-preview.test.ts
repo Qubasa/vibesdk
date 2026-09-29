@@ -97,6 +97,7 @@ describe('handleSpacePreview', () => {
 			branch: 'main',
 			crossSite: false,
 			secure: true,
+			expiresAt: null,
 		});
 
 		const res = await handleSpacePreview(
@@ -146,6 +147,44 @@ describe('handleSpacePreview', () => {
 		expect(
 			(await handleSpacePreview(previewRequest(token), env, 'space-a', 'main')).status,
 		).toBe(401);
+	});
+
+	it('serves a share link without expiry until the app is made private', async () => {
+		const env = makeEnv();
+		const token = await signSpacePreviewToken(
+			env,
+			{ spaceName: 'space-a', branch: 'main', userId: 'user-a', previewVersion: 0 },
+			null,
+		);
+
+		const res = await handleSpacePreview(previewRequest(token), env, 'space-a', 'main');
+		expect(res.status).toBe(200);
+		expect(res.headers.get('Set-Cookie') ?? '').not.toContain('Max-Age');
+
+		currentPreviewVersion = 1;
+		expect(
+			(await handleSpacePreview(previewRequest(token), env, 'space-a', 'main')).status,
+		).toBe(401);
+	});
+
+	it('prefers the link token over an older cookie, replacing the cookie', async () => {
+		const env = makeEnv();
+		const shortToken = await signSpacePreviewToken(env, {
+			spaceName: 'space-a',
+			branch: 'main',
+			userId: 'user-a',
+			previewVersion: 0,
+		});
+		const shareToken = await signSpacePreviewToken(
+			env,
+			{ spaceName: 'space-a', branch: 'main', userId: 'user-a', previewVersion: 0 },
+			null,
+		);
+		const cookie = `${SPACE_PREVIEW_COOKIE_NAME}=${shortToken}`;
+
+		const res = await handleSpacePreview(previewRequest(shareToken, cookie), env, 'space-a', 'main');
+		expect(res.status).toBe(200);
+		expect(res.headers.get('Set-Cookie')).toContain(`${SPACE_PREVIEW_COOKIE_NAME}=${shareToken}`);
 	});
 
 	it('on a separate preview domain, sets a partitioned cookie and strips ?t= before forwarding', async () => {

@@ -26,6 +26,7 @@ import {
 	GitBranch,
 	Globe,
 	Lock,
+	LinkSimple,
 	LockOpen,
 } from '@phosphor-icons/react';
 import {
@@ -89,7 +90,7 @@ import {
 	getDeployGateDialog,
 } from '@/utils/usage-limit-checker';
 import { queryKeys } from '@/lib/query-keys';
-import { ApiError } from '@/lib/api-client';
+import { ApiError, apiClient } from '@/lib/api-client';
 import { capitalizeFirstLetter } from '@/lib/utils';
 import { usePageHeader } from '@/components/layout/header-context';
 import { CloudflareLogo } from '@/components/icons/logos';
@@ -306,6 +307,32 @@ function ChatSession() {
 		}
 	}, [app, user, isOwner, updateVisibility, toast]);
 
+	const handleCopyShareLink = useCallback(async () => {
+		if (!app) return;
+		try {
+			// Handing the clipboard a pending value keeps the write tied to the
+			// click. Writing after the request returns is refused by Safari.
+			const link = apiClient.createPreviewShareLink(app.id).then((result) => {
+				if (!result.data) throw new Error('Empty share link response');
+				return new Blob([result.data.url], { type: 'text/plain' });
+			});
+			await navigator.clipboard.write([new ClipboardItem({ 'text/plain': link })]);
+			toast.add({
+				title: 'Share link copied. It works until you make the app private.',
+				variant: 'success',
+			});
+		} catch (error) {
+			console.error('Error creating share link:', error);
+			toast.add({
+				title:
+					error instanceof ApiError
+						? error.message
+						: 'Failed to create share link',
+				variant: 'error',
+			});
+		}
+	}, [app, toast]);
+
 	const handleFavorite = useCallback(async () => {
 		if (!app) return;
 		try {
@@ -486,6 +513,16 @@ function ChatSession() {
 								>
 									{isFavorited ? 'Bookmarked' : 'Bookmark'}
 								</DropdownMenu.Item>
+								{isOwner && app.visibility === 'public' && behaviorType === 'think' && (
+									<DropdownMenu.Item
+										icon={LinkSimple}
+										onClick={() => {
+											void handleCopyShareLink();
+										}}
+									>
+										Copy share link
+									</DropdownMenu.Item>
+								)}
 								{isOwner && app.visibility === 'public' && (
 									<DropdownMenu.Item
 										icon={Lock}
@@ -515,6 +552,7 @@ function ChatSession() {
 		navigate,
 		isUpdatingVisibility,
 		handleToggleVisibility,
+		handleCopyShareLink,
 		handleFavorite,
 		isFavorited,
 		behaviorType,

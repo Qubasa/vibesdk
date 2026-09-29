@@ -15,7 +15,7 @@ import {
 import { useAuth } from '@/contexts/auth-context';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { useAuthGuard } from '@/hooks/useAuthGuard';
-import { ApiError } from '@/lib/api-client';
+import { ApiError, apiClient } from '@/lib/api-client';
 import { capitalizeFirstLetter, getPreviewUrl } from '@/lib/utils';
 import { getFileType } from '@/utils/string';
 import {
@@ -354,9 +354,33 @@ export default function AppView() {
 		: ownerPreviewUrl || app?.cloudflareUrl || app?.previewUrl || '';
 	const promptText = app?.agentSummary?.query || app?.originalPrompt || '';
 
+	// The owner of a public app gets a link without expiry to hand out. It is
+	// minted up front because browsers only allow a clipboard write right
+	// after the click, not after a round trip.
+	const shareAppId =
+		isOwner && isThink && app?.visibility === 'public' && thinkPreviewUrl
+			? app.id
+			: undefined;
+	const [shareUrl, setShareUrl] = useState<string>();
+	useEffect(() => {
+		setShareUrl(undefined);
+		if (!shareAppId) return;
+		let cancelled = false;
+		apiClient
+			.createPreviewShareLink(shareAppId)
+			.then((result) => {
+				if (!cancelled) setShareUrl(result.data?.url);
+			})
+			.catch((err) => console.error('Error creating share link:', err));
+		return () => {
+			cancelled = true;
+		};
+	}, [shareAppId]);
+	const copyableUrl = shareUrl || appUrl;
+
 	const handleCopyUrl = () => {
-		if (!appUrl) return;
-		copyUrl(appUrl);
+		if (!copyableUrl) return;
+		copyUrl(copyableUrl);
 	};
 
 	const handlePreviewDeploy = async () => {
@@ -760,12 +784,15 @@ export default function AppView() {
 					<div className="flex-1 min-h-0 flex flex-col overflow-hidden">
 						<div className="shrink-0 flex items-center gap-2 px-3 py-2 border-b border-kumo-line bg-kumo-elevated/40">
 							<span className="text-sm font-medium text-text-primary shrink-0">
-								Live preview
+								{shareUrl ? 'Share link' : 'Live preview'}
 							</span>
 							{appUrl && (
 								<>
-									<code className="min-w-0 flex-1 truncate font-mono text-[0.9em] text-kumo-subtle px-2">
-										{appUrl}
+									<code
+										className="min-w-0 flex-1 truncate font-mono text-[0.9em] text-kumo-subtle px-2"
+										title={shareUrl ? 'Works for anyone until you make the app private' : undefined}
+									>
+										{copyableUrl}
 									</code>
 									<div className="flex items-center gap-0.5 shrink-0">
 										<Button
@@ -775,12 +802,12 @@ export default function AppView() {
 											aria-label={
 												urlCopied
 													? 'Copied'
-													: 'Copy URL'
+													: shareUrl ? 'Copy share link' : 'Copy URL'
 											}
 											title={
 												urlCopied
 													? 'Copied'
-													: 'Copy URL'
+													: shareUrl ? 'Copy share link' : 'Copy URL'
 											}
 											onClick={handleCopyUrl}
 											icon={
@@ -798,7 +825,7 @@ export default function AppView() {
 											aria-label="Open in new tab"
 											title="Open in new tab"
 											onClick={() =>
-												window.open(appUrl, '_blank', 'noopener,noreferrer')
+												window.open(copyableUrl, '_blank', 'noopener,noreferrer')
 											}
 											icon={
 												<ExternalLink className="size-3.5" />

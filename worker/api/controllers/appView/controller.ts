@@ -2,12 +2,13 @@
 import { BaseController } from '../baseController';
 import { ApiResponse, ControllerResponse } from '../types';
 import type { RouteContext } from '../../types/route-context';
-import { getAgentStubLightweight } from '../../../agents';
+import { getAgentStub, getAgentStubLightweight } from '../../../agents';
 import { AppService } from '../../../database/services/AppService';
 import { 
     AppDetailsData, 
     AppStarToggleData,
     GitCloneTokenData,
+    PreviewShareLinkData,
     PreviewTokenData,
 } from './types';
 import { AgentSummary, BehaviorType } from '../../../agents/core/types';
@@ -23,6 +24,9 @@ import {
     OWNER_PREVIEW_TOKEN_TTL_SECONDS,
     signOwnerPreviewToken,
 } from '../../../utils/ownerPreviewToken';
+
+const MIN_SHARE_LINK_TTL_SECONDS = 60;
+const MAX_SHARE_LINK_TTL_SECONDS = 365 * 24 * 3600;
 
 export class AppViewController extends BaseController {
     static logger = createLogger('AppViewController');
@@ -295,4 +299,63 @@ export class AppViewController extends BaseController {
         }
     }
 
+    /**
+     * Mint a preview link for a PUBLIC app that anyone holding it can open.
+     * Body `{ expiresInSeconds?: number | null }`: omitted or `null` gives a
+     * link without expiry. Every link dies when the app is made private.
+     * POST /api/apps/:id/share-link  (OWNER ONLY)
+     */
+    static async createShareLink(
+        request: Request,
+        env: Env,
+        _ctx: ExecutionContext,
+        context: RouteContext
+    ): Promise<ControllerResponse<ApiResponse<PreviewShareLinkData>>> {
+        try {
+            const appId = context.pathParams.id;
+            if (!appId) {
+                return AppViewController.createErrorResponse<PreviewShareLinkData>('App ID is required', 400);
+            }
+
+            const bodyResult = await AppViewController.parseJsonBody(request);
+            if (!bodyResult.success) {
+                return bodyResult.response! as ControllerResponse<ApiResponse<PreviewShareLinkData>>;
+            }
+            const body = bodyResult.data;
+            const requested = body && typeof body === 'object' && 'expiresInSeconds' in body
+                ? body.expiresInSeconds
+                : undefined;
+            let ttlSeconds: number | null = null;
+            if (typeof requested === 'number' && Number.isInteger(requested)
+                && requested >= MIN_SHARE_LINK_TTL_SECONDS && requested <= MAX_SHARE_LINK_TTL_SECONDS) {
+                ttlSeconds = requested;
+            } else if (requested !== undefined && requested !== null) {
+                return AppViewController.createErrorResponse<PreviewShareLinkData>(
+                    `expiresInSeconds must be null or an integer from ${MIN_SHARE_LINK_TTL_SECONDS} to ${MAX_SHARE_LINK_TTL_SECONDS}`,
+                    400,
+                );
+            }
+
+            const app = await new AppService(env).getAppDetails(appId, context.user!.id);
+            if (!app || app.userId !== context.user!.id) {
+                return AppViewController.createErrorResponse<PreviewShareLinkData>('App not found', 404);
+            }
+            if (app.visibility !== 'public') {
+                return AppViewController.createErrorResponse<PreviewShareLinkData>('Make the app public before sharing its preview', 400);
+            }
+
+            const url = await (await getAgentStub(env, appId)).getPreviewShareURL(ttlSeconds);
+            if (!url) {
+                return AppViewController.createErrorResponse<PreviewShareLinkData>('App has no deployed preview to share', 400);
+            }
+
+            return AppViewController.createSuccessResponse<PreviewShareLinkData>({
+                url,
+                expiresAt: ttlSeconds === null ? null : new Date(Date.now() + ttlSeconds * 1000).toISOString(),
+            });
+        } catch (error) {
+            this.logger.error('Error creating preview share link:', error);
+            return AppViewController.createErrorResponse<PreviewShareLinkData>('Failed to create share link', 500);
+        }
+    }
 }

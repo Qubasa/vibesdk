@@ -62,6 +62,16 @@ export interface PreviewTokenData {
     previewUrl: string;
 }
 
+/**
+ * Response data for a public app's preview share link. The link carries a
+ * signed token, so it works without an account, until `expiresAt` (never when
+ * `null`) or until the app is made private.
+ */
+export interface PreviewShareLinkData {
+    url: string;
+    expiresAt: string | null;
+}
+
 // /**
 //  * Response data for forkApp
 //  */

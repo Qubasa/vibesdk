@@ -22,7 +22,10 @@ import {
 	resolvePreviewHost,
 } from 'worker/utils/urls';
 import { isDev } from 'worker/utils/envs';
-import { signSpacePreviewToken } from 'worker/utils/spacePreviewToken';
+import {
+	signSpacePreviewToken,
+	SPACE_PREVIEW_TOKEN_TTL_SECONDS,
+} from 'worker/utils/spacePreviewToken';
 import { AppService } from 'worker/database/services/AppService';
 import { getConfigurationForModel } from '../../inferutils/core';
 import type { ThinkAgentConfig } from '../../think/ThinkAgent';
@@ -372,7 +375,10 @@ export class ThinkCodingBehavior
 		return `https://${host}`;
 	}
 
-	public async getBrowserPreviewURL(previewVersionOverride?: number): Promise<string> {
+	public async getBrowserPreviewURL(
+		previewVersionOverride?: number,
+		ttlSeconds: number | null = SPACE_PREVIEW_TOKEN_TTL_SECONDS,
+	): Promise<string> {
 		const spaceName = this.getAgentId();
 		const branch = this.state.currentBranch || 'main';
 		const previewBaseUrl = `${await this.getPublicOrigin()}${buildSpacePreviewPath(spaceName, branch)}`;
@@ -384,12 +390,16 @@ export class ThinkCodingBehavior
 		// app private later (which bumps it) invalidates this token.
 		const previewVersion = previewVersionOverride ??
 			(await new AppService(this.env).getPreviewVersion(spaceName)) ?? 0;
-		const token = await signSpacePreviewToken(this.env, {
-			spaceName,
-			branch,
-			userId: this.state.metadata.userId,
-			previewVersion,
-		});
+		const token = await signSpacePreviewToken(
+			this.env,
+			{
+				spaceName,
+				branch,
+				userId: this.state.metadata.userId,
+				previewVersion,
+			},
+			ttlSeconds,
+		);
 		return `${previewBaseUrl}?t=${encodeURIComponent(token)}`;
 	}
 

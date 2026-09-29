@@ -123,9 +123,11 @@ async function enforcePreviewRateLimit(
 
 /**
  * Unified, token-only preview auth. A request is authorized if it carries a
- * valid path/branch-scoped preview cookie, or a valid `?t=` token (which then
- * bootstraps the cookie). No session cookie / DB ownership check (claims-only),
- * but the token's `previewVersion` must still match the app's current epoch.
+ * valid `?t=` token (which then bootstraps the cookie) or a valid
+ * path/branch-scoped preview cookie. The link's token wins over an older
+ * cookie, so opening a longer-lived share link replaces a short-lived cookie.
+ * No session cookie / DB ownership check (claims-only), but the token's
+ * `previewVersion` must still match the app's current epoch.
  */
 export async function handleSpacePreview(
 	request: Request,
@@ -137,18 +139,7 @@ export async function handleSpacePreview(
 	const crossSite = isSeparatePreviewDomain(env);
 	const secure = url.protocol === 'https:';
 
-	// 1. Existing preview cookie (covers iframe sub-resources / client fetches).
-	const cookieToken = readPreviewCookie(request);
-	if (cookieToken) {
-		const claims = await verifySpacePreviewToken(env, cookieToken, spaceName, branch);
-		if (claims && (await isPreviewVersionCurrent(env, spaceName, claims))) {
-			const limited = await enforcePreviewRateLimit(env, cookieToken, request);
-			if (limited) return limited;
-			return forwardToSpacePreview(request, env, spaceName);
-		}
-	}
-
-	// 2. `?t=` token: forward and bootstrap the cookie (serve-in-place).
+	// 1. `?t=` token: forward and bootstrap the cookie (serve-in-place).
 	const queryToken = url.searchParams.get('t') ?? '';
 	if (queryToken) {
 		const claims = await verifySpacePreviewToken(env, queryToken, spaceName, branch);
@@ -162,9 +153,27 @@ export async function handleSpacePreview(
 			const withCookie = new Response(response.body, response);
 			withCookie.headers.append(
 				'Set-Cookie',
-				buildPreviewCookie({ token: queryToken, spaceName, branch, crossSite, secure }),
+				buildPreviewCookie({
+					token: queryToken,
+					spaceName,
+					branch,
+					crossSite,
+					secure,
+					expiresAt: claims.expiresAt,
+				}),
 			);
 			return withCookie;
+		}
+	}
+
+	// 2. Existing preview cookie (covers iframe sub-resources / client fetches).
+	const cookieToken = readPreviewCookie(request);
+	if (cookieToken) {
+		const claims = await verifySpacePreviewToken(env, cookieToken, spaceName, branch);
+		if (claims && (await isPreviewVersionCurrent(env, spaceName, claims))) {
+			const limited = await enforcePreviewRateLimit(env, cookieToken, request);
+			if (limited) return limited;
+			return forwardToSpacePreview(request, env, spaceName);
 		}
 	}
 
