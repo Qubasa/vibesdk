@@ -10,7 +10,7 @@ export interface SpacePreviewClaims {
 	userId: string;
 	/**
 	 * The app's `previewVersion` at mint time. Compared against the app's
-	 * current value at preview time so a visibility toggle (which bumps the
+	 * current value at preview time so making the app private (which bumps the
 	 * version) revokes this token.
 	 */
 	previewVersion: number;

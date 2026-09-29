@@ -380,8 +380,8 @@ export class ThinkCodingBehavior
 		// path-scoped HttpOnly preview cookie on first load (so iframe sub-resources
 		// authenticate), and authenticates machine clients like the headless
 		// `get_browser_console_logs` browser, which carry no cookie.
-		// Embed the app's current preview-token revocation epoch so a later
-		// visibility toggle (which bumps it) invalidates this token.
+		// Embed the app's current preview-token revocation epoch so making the
+		// app private later (which bumps it) invalidates this token.
 		const previewVersion = previewVersionOverride ??
 			(await new AppService(this.env).getPreviewVersion(spaceName)) ?? 0;
 		const token = await signSpacePreviewToken(this.env, {

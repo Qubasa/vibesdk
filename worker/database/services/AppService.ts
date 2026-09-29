@@ -555,14 +555,16 @@ export class AppService extends BaseService {
             return { success: false, error: 'You can only change visibility of your own apps' };
         }
 
-        // Update the app visibility. Bump `previewVersion` on every visibility
-        // change so outstanding space-preview tokens (which embed the value at
-        // mint) are revoked immediately after a public->private toggle.
+        // Bump `previewVersion` only when the app becomes private, which revokes
+        // every outstanding space-preview token (they embed the value at mint).
+        // Making an app public must not revoke the link the owner is about to share.
         const updatedApps = await this.database
             .update(schema.apps)
             .set({
                 visibility,
-                previewVersion: sql`${schema.apps.previewVersion} + 1`,
+                ...(visibility === 'private'
+                    ? { previewVersion: sql`${schema.apps.previewVersion} + 1` }
+                    : {}),
                 updatedAt: new Date()
             })
             .where(eq(schema.apps.id, appId))

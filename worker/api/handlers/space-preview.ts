@@ -83,8 +83,8 @@ function isWebSocketResponse(response: Response): boolean {
 
 /**
  * Confirm the token's embedded `previewVersion` still matches the app's current
- * value. A visibility toggle bumps `previewVersion` (see AppService), so a token
- * minted while public is rejected after a public->private toggle. Read from the
+ * value. Making an app private bumps `previewVersion` (see AppService), so a
+ * token minted before that is rejected. Read from the
  * primary DB (no cache) for ~1s revocation. `spaceName === appId`.
  */
 async function isPreviewVersionCurrent(

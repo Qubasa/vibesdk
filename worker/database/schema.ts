@@ -199,9 +199,9 @@ export const apps = sqliteTable('apps', {
     version: integer('version').default(1),
     parentAppId: text('parent_app_id'), // If forked from another app
 
-    // Preview-token revocation epoch. Incremented on every visibility change so
-    // outstanding space-preview tokens (which embed the value at mint) are
-    // rejected after a public->private toggle.
+    // Preview-token revocation epoch. Incremented whenever the app is made
+    // private, so outstanding space-preview tokens (which embed the value at
+    // mint) are rejected from then on.
     previewVersion: integer('preview_version').notNull().default(0),
     
     // Screenshot Information
